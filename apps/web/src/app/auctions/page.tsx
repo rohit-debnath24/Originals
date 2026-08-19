@@ -170,17 +170,23 @@ export default function AuctionsArenaPage() {
     return () => clearInterval(tickInterval);
   }, [auctions]);
 
-  // Penny Bomb local countdown timer
+  // Penny Bomb real-time countdown timer derived from server end timestamp
   useEffect(() => {
+    const pennyItem = auctions.find((a) => a.type === 'PENNY');
+    if (!pennyItem || !pennyItem.timer_end_ts) return;
+
     const timerInterval = setInterval(() => {
-      setPennyTimeLeft((prev) => {
-        if (prev <= 0.1) return 15.0;
-        return Math.round((prev - 0.1) * 10) / 10;
-      });
+      const remainingMs = pennyItem.timer_end_ts! - Date.now();
+      if (remainingMs <= 0) {
+        setPennyTimeLeft(0.0);
+        setActionMsg(`💥 BOMB EXPLODED! 🏆 ${pennyLeader} won the $${pennyPotVal.toFixed(2)} USDC jackpot!`);
+      } else {
+        setPennyTimeLeft(Math.round((remainingMs / 1000) * 10) / 10);
+      }
     }, 100);
 
     return () => clearInterval(timerInterval);
-  }, []);
+  }, [auctions, pennyLeader, pennyPotVal]);
 
   // --- Handlers ---
   const handleDutchBuyNow = async () => {

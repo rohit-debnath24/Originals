@@ -198,6 +198,25 @@ export class AuctionService {
   // GAME 2: 1-CENT BID BOMB (PENNY AUCTION)
   // ==========================================
 
+  public static checkExpiredPennyAuctions(): void {
+    const active = auctionRepository.getActiveAuctions();
+    const now = Date.now();
+
+    for (const a of active) {
+      if (a.type === 'PENNY' && a.timer_end_ts && now > a.timer_end_ts) {
+        if (a.current_leader_wallet) {
+          const user = userRepository.getOrCreateByWallet(a.current_leader_wallet);
+          LedgerService.processDeposit(user.id, a.pot_usdc, `penny_win_${a.id}`);
+        }
+        auctionRepository.updateAuctionStatus(a.id, 'SETTLED', a.current_leader_wallet || undefined);
+        auctionRepository.recordAuditLog(a.id, 'PENNY_EXPIRED_SETTLED', { winner: a.current_leader_wallet, pot: a.pot_usdc });
+        AuctionService.broadcastUpdate('PENNY_EXPLODED', { auctionId: a.id, winner: a.current_leader_wallet, potUsdc: a.pot_usdc });
+        logger.info({ auctionId: a.id, winner: a.current_leader_wallet, pot: a.pot_usdc }, '💥 Penny Bomb Exploded!');
+        AuctionService.initDefaultAuctions();
+      }
+    }
+  }
+
   public static handlePennyBid(auctionId: string, wallet: string, idempotencyKey?: string) {
     if (idempotencyKey && auctionRepository.hasIdempotencyKey(idempotencyKey)) {
       throw new Error('Duplicate bid detected via idempotency key');

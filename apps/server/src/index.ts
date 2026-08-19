@@ -81,6 +81,9 @@ const start = async () => {
     userRepository.getOrCreateByWallet('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
     AuctionService.initDefaultAuctions();
 
+    // Background timer for Penny Bomb automatic explosions
+    setInterval(() => AuctionService.checkExpiredPennyAuctions(), 1000);
+
     server.listen(PORT, () => {
       logger.info({ port: PORT }, '🚀 x402 Casino Server & WS Gateway started');
       logger.info(`   Health:   http://localhost:${PORT}/health`);
