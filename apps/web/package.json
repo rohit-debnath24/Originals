@@ -1,0 +1,43 @@
+{
+  "name": "@crypto-inr/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000 --turbopack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@crypto-inr/shared": "*",
+    "@rainbow-me/rainbowkit": "^2.1.2",
+    "@tanstack/react-query": "^5.51.1",
+    "@x402/evm": "^2.0.0",
+    "@x402/fetch": "^2.0.0",
+    "clsx": "^2.1.1",
+    "html5-qrcode": "^2.3.8",
+    "next": "16.0.10",
+    "qrcode.react": "^4.0.1",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "siwe": "^3.0.0",
+    "tailwind-merge": "^3.4.0",
+    "viem": "^2.17.0",
+    "wagmi": "^2.12.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.10",
+    "null-loader": "^4.0.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

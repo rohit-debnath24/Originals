@@ -1,0 +1,68 @@
+# Render Blueprint - Infrastructure as Code
+# Deploy both frontend and backend with one click
+# https://render.com/docs/blueprint-spec
+
+services:
+  # ============================================
+  # BACKEND API SERVER
+  # ============================================
+  - type: web
+    name: x402-pay-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      npm install
+      npm run build --workspace=@crypto-inr/shared
+      npm run build --workspace=@crypto-inr/server
+    startCommand: npm run start --workspace=@crypto-inr/server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: x402-pay-web
+          property: host
+          envVarKey: FRONTEND_URL
+      # x402 Configuration
+      - key: X402_FACILITATOR_URL
+        value: https://x402.org/facilitator
+      - key: X402_NETWORK
+        value: base-sepolia
+      - key: COMPANY_WALLET_ADDRESS
+        sync: false  # Set this manually in Render dashboard
+      - key: SESSION_SECRET
+        generateValue: true
+
+  # ============================================
+  # FRONTEND WEB APP
+  # ============================================
+  - type: web
+    name: x402-pay-web
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: |
+      npm install
+      npm run build --workspace=@crypto-inr/shared
+      npm run build --workspace=@crypto-inr/web
+    startCommand: npm run start --workspace=@crypto-inr/web
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: x402-pay-api
+          property: hostport
+          envVarKey: API_URL
+      - key: NEXT_PUBLIC_X402_FACILITATOR_URL
+        value: https://x402.org/facilitator
+      - key: NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID
+        sync: false  # Set this manually in Render dashboard

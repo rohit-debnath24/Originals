@@ -1,0 +1,30 @@
+{
+  "name": "crypto-inr-payments",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Crypto to INR instant payments platform using x402 protocol",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:server & npm run dev:web",
+    "dev:web": "npm run dev --workspace=@crypto-inr/web",
+    "dev:server": "npm run dev --workspace=@crypto-inr/server",
+    "build": "npm run build --workspaces",
+    "build:shared": "npm run build --workspace=@crypto-inr/shared",
+    "build:server": "npm run build:shared && npm run build --workspace=@crypto-inr/server",
+    "build:web": "npm run build:shared && npm run build --workspace=@crypto-inr/web",
+    "start:server": "npm run start --workspace=@crypto-inr/server",
+    "start:web": "npm run start --workspace=@crypto-inr/web",
+    "lint": "npm run lint --workspaces",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/.next apps/*/dist packages/*/dist"
+  },
+  "keywords": ["crypto", "payments", "usdc", "inr", "x402", "base"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
