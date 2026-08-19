@@ -7,6 +7,9 @@ export const auctionRoutes = Router();
 
 // GET active auctions with live server-authoritative prices
 auctionRoutes.get('/active', (_req, res) => {
+  // Ensure default active game rounds exist for all 4 auction types
+  AuctionService.initDefaultAuctions();
+
   const auctions = auctionRepository.getActiveAuctions();
   const now = Date.now();
 

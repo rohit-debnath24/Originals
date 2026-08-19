@@ -178,6 +178,9 @@ export class AuctionService {
     auctionRepository.recordAuditLog(auctionId, 'SETTLED', { wallet, bidId, txHash });
     AuctionService.broadcastUpdate('AUCTION_SETTLED', { auctionId, winner: wallet, prizeUsdc: auction.pot_usdc });
 
+    // Auto-create next active round for Dutch Auction
+    AuctionService.initDefaultAuctions();
+
     return { success: true, winner: wallet, prizeUsdc: auction.pot_usdc };
   }
 
@@ -187,6 +190,7 @@ export class AuctionService {
     activeAuctionLocks.delete(auctionId);
 
     auctionRepository.recordAuditLog(auctionId, 'LOCK_REVERTED', { bidId, reason });
+    AuctionService.initDefaultAuctions();
     return { success: true, message: 'Auction reverted to ACTIVE' };
   }
 
