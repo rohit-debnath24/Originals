@@ -25,11 +25,18 @@ export const db: DatabaseType = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 
+import { connectMongoDB } from './mongo.js';
+
 /**
  * Initialize database tables for Provably Fair Gaming & x402 Payments
  */
 export function initializeDatabase(): void {
   logger.info('Initializing gaming & x402 database...');
+
+  // Connect to MongoDB if MONGODB_URI is configured
+  if (process.env.MONGODB_URI) {
+    connectMongoDB(process.env.MONGODB_URI);
+  }
 
   // Users table
   db.exec(`
