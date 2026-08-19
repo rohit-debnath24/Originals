@@ -77,6 +77,16 @@ export function PlinkoGame() {
     return s;
   };
 
+  // Board layout math constants
+  const BOARD_WIDTH = 460;
+  const startX = (640 - BOARD_WIDTH) / 2; // 90
+  const startY = 35;
+  const endY = 330;
+  const spacingY = (endY - startY) / curRows;
+  const currentMults = RISKS[curRisk][curRows];
+  const numBuckets = currentMults.length; // curRows + 1
+  const bucketW = BOARD_WIDTH / numBuckets;
+
   const handleDropBall = () => {
     if (isDropping) return;
     if (betAmount > balance) {
@@ -90,54 +100,73 @@ export function PlinkoGame() {
     setNonceVal(Math.floor(Math.random() * 9000 + 1000));
 
     const rows = curRows;
-    const startX = 320;
-    let currX = startX;
-    let currY = 14;
-    let pathAcc = 0;
-    let step = 0;
-    const spacingY = (340 - 30) / rows;
+    const bWidth = BOARD_WIDTH / (rows + 1);
+    const sY = startY;
+    const spY = (endY - sY) / rows;
 
-    setBall({ cx: currX, cy: currY });
+    // Generate random binary choices for each row drop (-1 = left, +1 = right)
+    const directions: number[] = [];
+    for (let i = 0; i < rows; i++) {
+      directions.push(Math.random() < 0.5 ? -1 : 1);
+    }
+
+    // Build exact path coordinates:
+    // Point 0: above top peg
+    const path: { cx: number; cy: number }[] = [
+      { cx: 320, cy: 15 },
+    ];
+
+    let rightCount = 0;
+    // For each peg row r (0 to rows - 1), calculate which peg the ball hits
+    for (let r = 0; r < rows; r++) {
+      const cy = sY + r * spY;
+      const pegX = 320 + (rightCount - r / 2) * bWidth;
+      path.push({ cx: pegX, cy });
+
+      if (directions[r] === 1) {
+        rightCount++;
+      }
+    }
+
+    // Final point: drop inside target bucket center
+    const finalX = 320 + (rightCount - rows / 2) * bWidth;
+    path.push({ cx: finalX, cy: 376 });
+
+    let stepIndex = 0;
+    setBall(path[0]);
 
     const interval = setInterval(() => {
-      if (step >= rows) {
+      stepIndex++;
+      if (stepIndex >= path.length) {
         clearInterval(interval);
 
         const mults = RISKS[curRisk][rows];
-        const bucketIdx = Math.min(
-          mults.length - 1,
-          Math.max(0, pathAcc + Math.floor(mults.length / 2))
-        );
+        const bucketIdx = rightCount;
         const chosenMult = mults[bucketIdx];
         const payout = parseFloat((betAmount * chosenMult).toFixed(2));
 
+        // Highlight bucket and show payout
         setActiveBucket(bucketIdx);
         setLastMult(chosenMult);
         setLastPayout(payout);
         setHistory((prev) => [{ id: String(Date.now()), mult: chosenMult }, ...prev.slice(0, 10)]);
         setBalance((b) => parseFloat((b + payout - betAmount).toFixed(2)));
 
+        // Keep ball resting dead-center in the bucket for 1 second before resetting
         setTimeout(() => {
           setBall(null);
           setIsDropping(false);
-        }, 400);
+        }, 1000);
 
         return;
       }
 
-      const dir = Math.random() < 0.5 ? -1 : 1;
-      pathAcc += dir > 0 ? 1 : -1;
-      currX += dir * 13;
-      currY += spacingY;
-      setBall({ cx: currX, cy: currY });
-      step++;
-    }, 70);
+      setBall(path[stepIndex]);
+    }, 60);
   };
 
-  const currentMults = RISKS[curRisk][curRows];
-  const bucketW = 460 / currentMults.length;
-  const startX = (640 - 460) / 2;
-  const spacingY = (340 - 30) / curRows;
+  const textFontSizeClass =
+    curRows === 16 ? 'text-[9px]' : curRows === 12 ? 'text-[11px]' : 'text-[12px]';
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -170,26 +199,12 @@ export function PlinkoGame() {
               {/* Pegs */}
               {Array.from({ length: curRows }).map((_, r) => {
                 const cnt = r + 3;
-                const spX = 460 / (cnt + 1);
-                const sX = (640 - 460) / 2;
+                const cy = startY + r * spacingY;
                 return Array.from({ length: cnt }).map((__, c) => {
-                  const cx = sX + spX * (c + 1);
-                  const cy = 30 + r * spacingY;
+                  const cx = 320 + (c - (cnt - 1) / 2) * bucketW;
                   return <circle key={`${r}-${c}`} cx={cx} cy={cy} r="3.4" fill="#5E6E64" />;
                 });
               })}
-
-              {/* Animated Dropping Ball */}
-              {ball && (
-                <circle
-                  cx={ball.cx}
-                  cy={ball.cy}
-                  r="6.5"
-                  fill="#F1EDE1"
-                  className="transition-all duration-75 shadow-lg"
-                  filter="drop-shadow(0px 0px 6px #E8A93B)"
-                />
-              )}
 
               {/* Multiplier Buckets */}
               {currentMults.map((m, i) => {
@@ -198,10 +213,10 @@ export function PlinkoGame() {
                 return (
                   <g key={i}>
                     <rect
-                      x={x + 2}
+                      x={x + 1.5}
                       y={360}
-                      width={bucketW - 4}
-                      height={30}
+                      width={bucketW - 3}
+                      height={32}
                       rx={4}
                       fill={
                         isHit
@@ -217,7 +232,7 @@ export function PlinkoGame() {
                     <text
                       x={x + bucketW / 2}
                       y={380}
-                      className="font-mono-code text-[11px] font-bold"
+                      className={`font-mono-code ${textFontSizeClass} font-bold`}
                       textAnchor="middle"
                       fill={isHit ? '#0F1B16' : m >= 1 ? '#E8A93B' : '#C1503A'}
                     >
@@ -226,6 +241,18 @@ export function PlinkoGame() {
                   </g>
                 );
               })}
+
+              {/* Animated Dropping Ball */}
+              {ball && (
+                <circle
+                  cx={ball.cx}
+                  cy={ball.cy}
+                  r="6.5"
+                  fill="#F1EDE1"
+                  className="transition-all duration-75 shadow-lg"
+                  filter="drop-shadow(0px 0px 8px #E8A93B)"
+                />
+              )}
             </svg>
           </div>
 
@@ -362,3 +389,4 @@ export function PlinkoGame() {
     </div>
   );
 }
+
