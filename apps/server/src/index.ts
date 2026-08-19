@@ -22,6 +22,7 @@ app.use(helmet({
 const allowedOrigins = [
   process.env['FRONTEND_URL'] || 'http://localhost:3000',
   /\.onrender\.com$/,
+  /\.vercel\.app$/,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ];
