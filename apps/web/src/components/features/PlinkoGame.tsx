@@ -87,6 +87,38 @@ export function PlinkoGame() {
   const numBuckets = currentMults.length; // curRows + 1
   const bucketW = BOARD_WIDTH / numBuckets;
 
+  const deductStakeBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/debit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `plinko_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync debit with server', e);
+    }
+  };
+
+  const creditWinBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `plinko_win_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync win credit with server', e);
+    }
+  };
+
   const handleDropBall = () => {
     if (isDropping) return;
     if (betAmount > balance) {
@@ -95,6 +127,10 @@ export function PlinkoGame() {
     }
 
     setIsDropping(true);
+    // Deduct stake immediately upon dropping ball
+    setBalance((b) => parseFloat(Math.max(0, b - betAmount).toFixed(2)));
+    deductStakeBackend(betAmount);
+
     setActiveBucket(null);
     setSeedHash(`${rndHex(4)}…${rndHex(4)}`);
     setNonceVal(Math.floor(Math.random() * 9000 + 1000));
@@ -150,7 +186,12 @@ export function PlinkoGame() {
         setLastMult(chosenMult);
         setLastPayout(payout);
         setHistory((prev) => [{ id: String(Date.now()), mult: chosenMult }, ...prev.slice(0, 10)]);
-        setBalance((b) => parseFloat((b + payout - betAmount).toFixed(2)));
+        
+        // Add payout to balance (stake was debited upfront)
+        if (payout > 0) {
+          setBalance((b) => parseFloat((b + payout).toFixed(2)));
+          creditWinBackend(payout);
+        }
 
         // Keep ball resting dead-center in the bucket for 1 second before resetting
         setTimeout(() => {

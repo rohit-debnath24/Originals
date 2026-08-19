@@ -6,8 +6,8 @@ const monorepoRoot = path.resolve(__dirname, '../..');
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
-  // Output standalone for Docker/production deployments
-  output: 'standalone',
+  // Configure monorepo root for outputFileTracing
+  outputFileTracingRoot: monorepoRoot,
   // Empty turbopack config to acknowledge we're using turbopack for dev
   turbopack: {},
   webpack: (config) => {

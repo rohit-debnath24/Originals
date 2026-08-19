@@ -45,7 +45,7 @@ export function CrashGame() {
     { wallet: '0x2a…f88', amount: 6.0, cashedAt: 1.34 },
   ]);
 
-  const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
+  const [points, setPoints] = useState<{ t: number; mult: number }[]>([]);
   const [activeSeedHash, setActiveSeedHash] = useState<string>('9b2f…7710');
   const [roundId, setRoundId] = useState<string>('#48213');
 
@@ -86,17 +86,55 @@ export function CrashGame() {
     return s;
   };
 
+  const deductStakeBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/debit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `crash_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync debit with server', e);
+    }
+  };
+
+  const creditWinBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `crash_win_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync win credit with server', e);
+    }
+  };
+
   const startRound = () => {
     if (betAmount > balance && !betPlaced) {
       alert('Insufficient USDC balance! Top up using the + Top Up button.');
       return;
     }
 
+    // Deduct stake immediately when starting round
+    if (betPlaced) {
+      setBalance((b) => parseFloat(Math.max(0, b - betAmount).toFixed(2)));
+      deductStakeBackend(betAmount);
+    }
+
     const targetCrash = Math.max(1.01, parseFloat((0.98 / (1 - Math.random())).toFixed(2)));
     setCrashPoint(targetCrash);
     setGameState('RUNNING');
     setCurMult(1.0);
-    setPoints([{ x: 0, y: 210 }]);
+    setPoints([{ t: 0, mult: 1.0 }]);
     setActiveSeedHash(`${rndHex(4)}…${rndHex(4)}`);
     setRoundId(`#${Math.floor(40000 + Math.random() * 9000)}`);
 
@@ -105,9 +143,7 @@ export function CrashGame() {
       t += 1;
       const nextMult = parseFloat((1 + Math.pow(t / 28, 1.55)).toFixed(2));
       
-      const x = Math.min(630, t * 7);
-      const y = Math.max(10, 210 - Math.log(nextMult) * 70);
-      setPoints((prev) => [...prev, { x, y }]);
+      setPoints((prev) => [...prev, { t, mult: nextMult }]);
       setCurMult(nextMult);
 
       // Auto cash out check
@@ -120,11 +156,8 @@ export function CrashGame() {
         setGameState('BUSTED');
         setHistory((prev) => [{ id: String(Date.now()), multiplier: targetCrash }, ...prev.slice(0, 15)]);
         
-        if (betPlaced && !cashedOut) {
-          // Player busted
-          setBalance((b) => Math.max(0, b - betAmount));
-          setBetPlaced(false);
-        }
+        // Player busted - stake was already debited upfront
+        setBetPlaced(false);
 
         setTimeout(() => {
           setGameState('IDLE');
@@ -141,25 +174,76 @@ export function CrashGame() {
     setCashedMult(mult);
     const winAmt = parseFloat((betAmount * mult).toFixed(2));
     setCashedPayout(winAmt);
-    setBalance((b) => parseFloat((b + winAmt - betAmount).toFixed(2)));
+    
+    // Add winning payout to balance and sync with server
+    setBalance((b) => parseFloat((b + winAmt).toFixed(2)));
+    creditWinBackend(winAmt);
   };
 
   const handlePlaceBet = () => {
     if (gameState === 'IDLE') {
+      if (betAmount > balance) {
+        alert('Insufficient USDC balance! Top up using the + Top Up button.');
+        return;
+      }
       setBetPlaced(true);
       setCashedOut(false);
+      // Immediately deduct balance for UX responsiveness
+      setBalance((b) => parseFloat(Math.max(0, b - betAmount).toFixed(2)));
+      deductStakeBackend(betAmount);
       startRound();
     } else if (gameState === 'RUNNING' && !betPlaced) {
+      if (betAmount > balance) {
+        alert('Insufficient USDC balance! Top up using the + Top Up button.');
+        return;
+      }
       setBetPlaced(true);
       setCashedOut(false);
+      setBalance((b) => parseFloat(Math.max(0, b - betAmount).toFixed(2)));
+      deductStakeBackend(betAmount);
     } else if (gameState === 'RUNNING' && betPlaced && !cashedOut) {
       doCashOut(curMult);
     }
   };
 
-  const pathD = points.length > 0
-    ? `M 0 210 ` + points.map((p) => `L ${p.x} ${p.y}`).join(' ')
-    : 'M 0 210 L 630 210';
+  // Dynamic camera viewport scaling with 25% headroom so the rocket tip never sticks to the upper/right bound
+  const isExpanded = curMult >= 8.0;
+  const canvasHeight = isExpanded ? 340 : 220;
+  const baseY = isExpanded ? 310 : 200;
+  const rangeY = isExpanded ? 270 : 170;
+
+  const currentT = points[points.length - 1]?.t || 0;
+  const maxT = Math.max(45, currentT * 1.25);
+  const maxMult = Math.max(2.0, curMult * 1.25);
+
+  const scaledPoints = points.map((p) => {
+    // Horizontal progress: linear ratio of p.t vs maxT (caps rocket tip at ~80% width)
+    const progressX = Math.min(1.0, p.t / maxT);
+    const px = 20 + progressX * 600;
+
+    // Vertical progress: smooth power curve ratio of p.mult vs maxMult (caps rocket tip at ~84% height, max slope ~19°)
+    const multRatio = (p.mult - 1.0) / Math.max(0.001, maxMult - 1.0);
+    const progressY = Math.min(1.0, Math.pow(Math.max(0, multRatio), 0.75));
+    const py = baseY - progressY * rangeY;
+
+    return { x: px, y: py };
+  });
+
+  const pathD = scaledPoints.length > 0
+    ? `M ${scaledPoints[0].x.toFixed(1)} ${scaledPoints[0].y.toFixed(1)} ` + scaledPoints.slice(1).map((p) => `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ')
+    : `M 20 ${baseY} L 620 ${baseY}`;
+
+  const fillD = scaledPoints.length > 0
+    ? `${pathD} L ${scaledPoints[scaledPoints.length - 1].x.toFixed(1)} ${baseY} L ${scaledPoints[0].x.toFixed(1)} ${baseY} Z`
+    : '';
+
+  // Dynamic grid guidelines
+  const gridMarkers = [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024].filter((m) => m <= maxMult).map((m) => {
+    const multRatio = (m - 1.0) / Math.max(0.001, maxMult - 1.0);
+    const progressY = Math.min(1.0, Math.pow(Math.max(0, multRatio), 0.75));
+    const y = baseY - progressY * rangeY;
+    return { label: `${m}×`, y };
+  });
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -204,15 +288,55 @@ export function CrashGame() {
             </p>
           </div>
 
-          {/* SVG Rocket Path Graph */}
-          <div className="relative w-full h-[220px] bg-[#0F1B16] border border-[rgba(241,237,225,0.12)] rounded-xl overflow-hidden mb-4">
-            <svg viewBox="0 0 640 220" className="w-full h-full">
+          {/* SVG Rocket Path Graph Stage */}
+          <div className={`relative w-full ${
+            isExpanded ? 'h-[340px]' : 'h-[220px]'
+          } bg-[#0F1B16] border border-[rgba(241,237,225,0.12)] rounded-xl overflow-hidden mb-4 transition-all duration-700 ease-out`}>
+            {isExpanded && (
+              <div className="absolute top-3 right-3 px-3 py-1 bg-[#E8A93B]/10 border border-[#E8A93B]/40 text-[#E8A93B] text-xs font-mono-code rounded-full font-bold animate-pulse flex items-center gap-1.5 z-10">
+                <span className="w-2 h-2 rounded-full bg-[#E8A93B]"></span>
+                8x+ Expanded View
+              </div>
+            )}
+
+            <svg viewBox={`0 0 640 ${canvasHeight}`} className="w-full h-full transition-all duration-500">
+              <defs>
+                <linearGradient id="crashGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={gameState === 'BUSTED' ? '#C1503A' : '#E8A93B'} stopOpacity="0.25" />
+                  <stop offset="100%" stopColor={gameState === 'BUSTED' ? '#C1503A' : '#E8A93B'} stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Dynamic Grid Guideline Markers */}
+              {gridMarkers.map((g, idx) => (
+                <g key={idx}>
+                  <line x1="20" y1={g.y} x2="620" y2={g.y} stroke="rgba(241,237,225,0.07)" strokeDasharray="4 4" />
+                  <text x="24" y={g.y - 4} fill="#5E6E64" fontSize="10" fontFamily="monospace">{g.label}</text>
+                </g>
+              ))}
+
+              {/* Gradient Area under Curve */}
+              {fillD && <path d={fillD} fill="url(#crashGrad)" />}
+
+              {/* Curve Stroke Line */}
               <path
                 d={pathD}
                 fill="none"
                 stroke={gameState === 'BUSTED' ? '#C1503A' : '#E8A93B'}
-                strokeWidth="2.5"
+                strokeWidth="3"
+                strokeLinecap="round"
               />
+
+              {/* Glowing Leading Rocket Point */}
+              {scaledPoints.length > 0 && (
+                <circle
+                  cx={scaledPoints[scaledPoints.length - 1].x}
+                  cy={scaledPoints[scaledPoints.length - 1].y}
+                  r="5"
+                  fill={gameState === 'BUSTED' ? '#C1503A' : '#E8A93B'}
+                  className={gameState === 'RUNNING' ? 'animate-pulse' : ''}
+                />
+              )}
             </svg>
           </div>
 

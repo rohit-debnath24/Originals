@@ -34,4 +34,38 @@ router.post('/:id/faucet', async (req: Request, res: Response, next: NextFunctio
   }
 });
 
+router.post('/:id/debit', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.id!;
+    const { amount, referenceId } = req.body;
+    userService.getOrCreateByWallet(userId);
+    const result = LedgerService.preDebitBet(userId, Number(amount), referenceId || `bet_${generateId()}`);
+    if (!result.success) {
+      res.status(400).json({ success: false, error: result.error });
+      return;
+    }
+    res.json({
+      success: true,
+      data: { balanceUSDC: result.balanceAfter }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/credit', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.id!;
+    const { amount, referenceId } = req.body;
+    userService.getOrCreateByWallet(userId);
+    const result = LedgerService.settleWin(userId, Number(amount), referenceId || `win_${generateId()}`);
+    res.json({
+      success: true,
+      data: { balanceUSDC: result.balanceAfter }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export const userRoutes = router;

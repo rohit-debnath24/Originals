@@ -7,12 +7,15 @@ import { injected, walletConnect, coinbaseWallet } from 'wagmi/connectors';
 export const USDC_ADDRESS = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const;
 export const COMPANY_WALLET = '0x0000000000000000000000000000000000000001' as const;
 
+const walletConnectProjectId = process.env['NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID'] || 'c4f79cc821944d9680842e344664b36b';
+
 export const config = createConfig({
   chains: [baseSepolia],
   connectors: [
     injected(),
     walletConnect({ 
-      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'c4f79cc821944d9680842e344664b36b' 
+      projectId: walletConnectProjectId,
+      showQrModal: false, // Prevents auto-fetching Reown config modal on localhost load
     }),
     coinbaseWallet({ appName: 'Originals' }),
   ],

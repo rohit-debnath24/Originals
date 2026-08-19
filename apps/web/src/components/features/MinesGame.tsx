@@ -63,6 +63,38 @@ export function MinesGame() {
     return parseFloat((houseEdge / p).toFixed(2));
   };
 
+  const deductStakeBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/debit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `mines_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync debit with server', e);
+    }
+  };
+
+  const creditWinBackend = async (amount: number) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/credit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, referenceId: `mines_win_${Date.now()}` })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.balanceUSDC !== undefined) {
+        setBalance(data.data.balanceUSDC);
+      }
+    } catch (e) {
+      console.error('Failed to sync win credit with server', e);
+    }
+  };
+
   const handleStartGame = () => {
     if (gameOn) {
       // Cash out
@@ -81,6 +113,10 @@ export function MinesGame() {
       newMines.add(Math.floor(Math.random() * GRID_SIZE));
     }
 
+    // Deduct stake immediately upon starting round
+    setBalance((b) => parseFloat(Math.max(0, b - betAmount).toFixed(2)));
+    deductStakeBackend(betAmount);
+
     setMineSet(newMines);
     setRevealedSet(new Set());
     setHitMine(false);
@@ -93,10 +129,9 @@ export function MinesGame() {
     if (!gameOn || revealedSet.has(idx) || hitMine) return;
 
     if (mineSet.has(idx)) {
-      // Mine hit!
+      // Mine hit! Stake was debited upfront.
       setHitMine(true);
       setGameOn(false);
-      setBalance((b) => Math.max(0, b - betAmount));
       return;
     }
 
@@ -111,7 +146,8 @@ export function MinesGame() {
     if (updatedRevealed.size >= GRID_SIZE - minesCount) {
       // All gems revealed -> Auto Win!
       const payout = parseFloat((betAmount * nextMult).toFixed(2));
-      setBalance((b) => parseFloat((b + payout - betAmount).toFixed(2)));
+      setBalance((b) => parseFloat((b + payout).toFixed(2)));
+      creditWinBackend(payout);
       setGameOn(false);
     }
   };
@@ -119,7 +155,8 @@ export function MinesGame() {
   const handleCashOut = () => {
     if (!gameOn) return;
     const payout = parseFloat((betAmount * curMult).toFixed(2));
-    setBalance((b) => parseFloat((b + payout - betAmount).toFixed(2)));
+    setBalance((b) => parseFloat((b + payout).toFixed(2)));
+    creditWinBackend(payout);
     setGameOn(false);
   };
 

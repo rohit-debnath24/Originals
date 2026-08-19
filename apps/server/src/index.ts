@@ -5,7 +5,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { logger } from './utils/logger.js';
 import { errorHandler, requestLogger } from './middleware/index.js';
-import { authRoutes, userRoutes, gameRoutes } from './routes/index.js';
+import { authRoutes, userRoutes, gameRoutes, auctionRoutes } from './routes/index.js';
+import { AuctionService } from './services/auction.service.js';
 import { initializeDatabase } from './db/index.js';
 import { WebSocketGateway } from './gateway/ws.gateway.js';
 import { userRepository } from './repositories/user.repository.js';
@@ -61,6 +62,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/auction', auctionRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -74,14 +76,16 @@ const start = async () => {
     // Initialize database
     initializeDatabase();
 
-    // Seed default demo user
+    // Seed default demo user & auctions
     userRepository.getOrCreateByWallet('0x71C7656EC7ab88b098defB751B7401B5f6d8976F');
+    AuctionService.initDefaultAuctions();
 
     server.listen(PORT, () => {
       logger.info({ port: PORT }, '🚀 x402 Casino Server & WS Gateway started');
-      logger.info(`   Health: http://localhost:${PORT}/health`);
-      logger.info(`   API:    http://localhost:${PORT}/api/game/recent-bets`);
-      logger.info(`   WS:     ws://localhost:${PORT}/ws`);
+      logger.info(`   Health:   http://localhost:${PORT}/health`);
+      logger.info(`   Auctions: http://localhost:${PORT}/api/auction/active`);
+      logger.info(`   API:      http://localhost:${PORT}/api/game/recent-bets`);
+      logger.info(`   WS:       ws://localhost:${PORT}/ws`);
     });
   } catch (error) {
     logger.error({ error }, 'Failed to start server');

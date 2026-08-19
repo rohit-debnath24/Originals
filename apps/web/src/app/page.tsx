@@ -44,6 +44,7 @@ export default function HomePage() {
 
           <div className="hidden md:flex gap-8 text-sm text-[#93A499] font-medium">
             <a href="#games" className="hover:text-[#F1EDE1] transition">Games</a>
+            <Link href="/auctions" className="text-[#E8A93B] font-bold hover:underline transition">🔥 x402 Auctions</Link>
             <a href="#fair" className="hover:text-[#F1EDE1] transition">Provably fair</a>
             <a href="#pay" className="hover:text-[#F1EDE1] transition">Payments</a>
             <Link href="/verifier" className="hover:text-[#E8A93B] transition text-[#93A499]">Verifier</Link>
@@ -67,11 +68,11 @@ export default function HomePage() {
               Four in-house games, no account, no custody. Connect a wallet, stake in USDC, and check the math on any round yourself — the seed's hashed before you bet and revealed after.
             </p>
             <div className="flex gap-4 flex-wrap">
-              <a href="#games" className="bg-[#E8A93B] hover:bg-[#B8842A] text-[#0F1B16] px-6 py-3.5 rounded-[10px] font-semibold text-sm transition">
-                Play now →
-              </a>
-              <a href="#fair" className="border border-[rgba(241,237,225,0.22)] hover:border-[#F1EDE1] px-6 py-3.5 rounded-[10px] font-medium text-sm text-[#F1EDE1] transition">
-                How it's verified
+              <Link href="/auctions" className="bg-[#E8A93B] hover:bg-[#B8842A] text-[#0F1B16] px-6 py-3.5 rounded-[10px] font-bold text-sm transition">
+                🔥 Play x402 Bidding Games →
+              </Link>
+              <a href="#games" className="border border-[rgba(241,237,225,0.22)] hover:border-[#F1EDE1] px-6 py-3.5 rounded-[10px] font-medium text-sm text-[#F1EDE1] transition">
+                Play Originals
               </a>
             </div>
           </div>
@@ -118,13 +119,29 @@ export default function HomePage() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
             <div>
               <div className="font-mono-code text-xs tracking-[0.14em] uppercase text-[#E8A93B] mb-2">
-                THE ORIGINALS
+                THE ORIGINALS & x402 AUCTIONS
               </div>
               <h2 className="font-archivo text-3xl sm:text-4xl font-bold">Built in-house, opened up</h2>
             </div>
             <p className="text-[#93A499] text-sm max-w-sm">
               Each game's outcome is a deterministic function of a server seed, your client seed, and the round number — nothing is decided after you bet.
             </p>
+          </div>
+
+          {/* Featured Bidding Games Arena Banner */}
+          <div className="bg-gradient-to-r from-[#1C332A] to-[#152620] border-2 border-[#E8A93B]/40 rounded-2xl p-8 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div>
+              <span className="font-mono-code text-xs px-3 py-1 rounded-full uppercase bg-[#E8A93B] text-[#0F1B16] font-bold">
+                NEW RELEASE
+              </span>
+              <h3 className="font-archivo text-2xl sm:text-3xl font-bold mt-3 mb-2">🔥 x402 Real-Time Bidding Arena</h3>
+              <p className="text-[#93A499] text-sm max-w-lg">
+                Dutch Auction Royale (Tick-Down), 1-Cent Bid Bomb Jackpot, Sealed-Bid Highest Unique & Reverse Auction.
+              </p>
+            </div>
+            <Link href="/auctions" className="bg-[#E8A93B] hover:bg-[#B8842A] text-[#0F1B16] font-bold px-8 py-4 rounded-xl text-base transition whitespace-nowrap">
+              Enter Bidding Arena →
+            </Link>
           </div>
 
           {/* Interactive Dice Game Play Area */}
