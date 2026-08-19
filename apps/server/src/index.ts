@@ -68,7 +68,8 @@ app.use('/api/auction', auctionRoutes);
 app.use(errorHandler);
 
 // Attach WebSocket Gateway
-new WebSocketGateway(server);
+const wsGateway = new WebSocketGateway(server);
+AuctionService.setWebSocketGateway(wsGateway);
 
 // Start server
 const start = async () => {

@@ -35,6 +35,12 @@ auctionRoutes.get('/active', (_req, res) => {
   res.json({ success: true, data: enriched });
 });
 
+// GET recent audit logs & bet history stream
+auctionRoutes.get('/audit-logs', (_req, res) => {
+  const logs = auctionRepository.getRecentAuditLogs(30);
+  res.json({ success: true, data: logs });
+});
+
 // GAME 1: Dutch Auction Buy Intent (Lock)
 auctionRoutes.post('/dutch/buy-intent', (req, res, next) => {
   try {

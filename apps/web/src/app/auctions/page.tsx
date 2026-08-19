@@ -19,13 +19,24 @@ interface AuctionItem {
   timer_end_ts: number | null;
 }
 
+interface AuditLog {
+  id: string;
+  auction_id: string;
+  event_type: string;
+  payload: string;
+  timestamp: string;
+}
+
 export default function AuctionsArenaPage() {
   const [activeTab, setActiveTab] = useState<'all' | 's1' | 's2' | 's3' | 's4'>('all');
   const [auctions, setAuctions] = useState<AuctionItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
-  // Client Wallet
+  // User Wallet & Balance State
   const DEMO_WALLET = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
+  const [balance, setBalance] = useState<number>(100.0);
+  const [deductionAnim, setDeductionAnim] = useState<{ text: string; color: string } | null>(null);
 
   // Game 1: Dutch State
   const [dutchPrice, setDutchPrice] = useState(150);
@@ -50,10 +61,51 @@ export default function AuctionsArenaPage() {
   const [reverseCentInput, setReverseCentInput] = useState('03');
   const [selectedCell, setSelectedCell] = useState(3);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+  const rawApiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '');
+  const API_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
 
-  // Fetch live auctions from server
-  const fetchAuctions = async () => {
+  // Fetch live user balance
+  const fetchUserBalance = async () => {
+    try {
+      const baseUrl = API_URL.replace('/auction', '');
+      const res = await fetch(`${baseUrl}/users/me?wallet=${DEMO_WALLET}`);
+      const data = await res.json();
+      if (data.success && data.data && data.data.balance_usdc !== undefined) {
+        setBalance(data.data.balance_usdc);
+      }
+    } catch (err) {
+      console.error('Failed to fetch user balance', err);
+    }
+  };
+
+  // Claim Testnet USDC Faucet
+  const handleTopUp = async () => {
+    try {
+      const baseUrl = API_URL.replace('/auction', '');
+      const res = await fetch(`${baseUrl}/users/faucet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: DEMO_WALLET }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBalance(data.data.balance_usdc);
+        triggerDeductionAnimation('+100.00 USDC', 'text-[#3ECF8E]');
+        setActionMsg('🎉 Claimed +100 USDC testnet balance!');
+      }
+    } catch (err: any) {
+      setActionMsg(`❌ Top up failed: ${err.message}`);
+    }
+  };
+
+  // Floating Deduction Animation Helper
+  const triggerDeductionAnimation = (text: string, color: string) => {
+    setDeductionAnim({ text, color });
+    setTimeout(() => setDeductionAnim(null), 2500);
+  };
+
+  // Fetch live auctions & audit logs from server
+  const fetchAuctionsAndLogs = async () => {
     try {
       const res = await fetch(`${API_URL}/auction/active`);
       const data = await res.json();
@@ -75,14 +127,25 @@ export default function AuctionsArenaPage() {
           }
         }
       }
+
+      // Fetch audit logs
+      const logRes = await fetch(`${API_URL}/auction/audit-logs`);
+      const logData = await logRes.json();
+      if (logData.success && logData.data) {
+        setAuditLogs(logData.data);
+      }
     } catch (err) {
       console.error('Auction polling failed', err);
     }
   };
 
   useEffect(() => {
-    fetchAuctions();
-    const interval = setInterval(fetchAuctions, 1000);
+    fetchUserBalance();
+    fetchAuctionsAndLogs();
+    const interval = setInterval(() => {
+      fetchAuctionsAndLogs();
+      fetchUserBalance();
+    }, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -142,6 +205,11 @@ export default function AuctionsArenaPage() {
       const result = await res.json();
       if (result.success) {
         setActionMsg(`✅ LOCKED AT $${result.data.settlementPriceUsdc}! Settling x402 payment...`);
+        
+        // Immediate balance deduction animation
+        setBalance((prev) => Math.max(0, prev - result.data.settlementPriceUsdc));
+        triggerDeductionAnimation(`-${result.data.settlementPriceUsdc.toFixed(2)} USDC`, 'text-[#FF5C5C]');
+
         await fetch(`${API_URL}/auction/dutch/settle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -152,7 +220,11 @@ export default function AuctionsArenaPage() {
             txHash: '0x_x402_settled_tx',
           }),
         });
-        fetchAuctions();
+
+        // Trigger win payout animation
+        triggerDeductionAnimation(`+$${dutchItem.pot_usdc || 100} WIN!`, 'text-[#3ECF8E]');
+        fetchAuctionsAndLogs();
+        fetchUserBalance();
       } else {
         setActionMsg(`❌ ${result.error}`);
       }
@@ -166,6 +238,10 @@ export default function AuctionsArenaPage() {
     if (!pennyItem) return;
 
     try {
+      // Immediate frontend deduction for snappy UX
+      setBalance((prev) => Math.max(0, prev - 0.10));
+      triggerDeductionAnimation('-0.10 USDC', 'text-[#FF5C5C]');
+
       const res = await fetch(`${API_URL}/auction/penny/bid`, {
         method: 'POST',
         headers: {
@@ -188,8 +264,11 @@ export default function AuctionsArenaPage() {
           ...prev.slice(0, 5),
         ]);
         setActionMsg(`💣 Bid placed! Pot increased to $${result.data.potUsdc.toFixed(2)} USDC.`);
+        fetchAuctionsAndLogs();
+        fetchUserBalance();
       } else {
         setActionMsg(`❌ ${result.error}`);
+        fetchUserBalance();
       }
     } catch (err: any) {
       setActionMsg(`❌ Error: ${err.message}`);
@@ -211,7 +290,12 @@ export default function AuctionsArenaPage() {
 
     try {
       const val = type === 'SEALED_HIGHEST' ? parseFloat(sealedBidInput) : parseFloat(reverseCentInput) / 100;
+      const fee = type === 'SEALED_HIGHEST' ? 1.0 : 0.25;
       const hash = await computeHash(val, sealedSaltInput, DEMO_WALLET);
+
+      // Deduct entry fee
+      setBalance((prev) => Math.max(0, prev - fee));
+      triggerDeductionAnimation(`-${fee.toFixed(2)} USDC`, 'text-[#FF5C5C]');
 
       const res = await fetch(`${API_URL}/auction/sealed/commit`, {
         method: 'POST',
@@ -220,15 +304,18 @@ export default function AuctionsArenaPage() {
           auctionId: item.id,
           wallet: DEMO_WALLET,
           commitmentHash: hash,
-          entryFee: 1.0,
+          entryFee: fee,
         }),
       });
 
       const result = await res.json();
       if (result.success) {
         setActionMsg(`🙈 Commitment submitted! Hash: ${hash.substring(0, 10)}...`);
+        fetchAuctionsAndLogs();
+        fetchUserBalance();
       } else {
         setActionMsg(`❌ ${result.error}`);
+        fetchUserBalance();
       }
     } catch (err: any) {
       setActionMsg(`❌ Error: ${err.message}`);
@@ -255,6 +342,7 @@ export default function AuctionsArenaPage() {
       const result = await res.json();
       if (result.success) {
         setActionMsg(`🔓 Reveal verified! Bid: $${val} accepted.`);
+        fetchAuctionsAndLogs();
       } else {
         setActionMsg(`❌ ${result.error}`);
       }
@@ -278,10 +366,14 @@ export default function AuctionsArenaPage() {
       if (result.success && result.data) {
         if (result.data.winnerWallet) {
           setActionMsg(`🏆 Winner: ${result.data.winnerWallet.substring(0, 8)}... Winning Bid: $${result.data.winningBid}`);
+          if (result.data.winnerWallet.toLowerCase() === DEMO_WALLET.toLowerCase()) {
+            triggerDeductionAnimation('+$50.00 WIN!', 'text-[#3ECF8E]');
+          }
         } else {
           setActionMsg(`🔄 No unique bids found. Pot rolled over!`);
         }
-        fetchAuctions();
+        fetchAuctionsAndLogs();
+        fetchUserBalance();
       }
     } catch (err: any) {
       setActionMsg(`❌ Error: ${err.message}`);
@@ -308,10 +400,29 @@ export default function AuctionsArenaPage() {
             x402 ARENA
           </Link>
           
-          <div className="flex items-center gap-4">
-            <span className="hidden sm:inline-block text-[10px] color-[#7A8290] border border-[#242A34] px-3 py-1.5 rounded tracking-widest uppercase">
-              USDC · SUB-SECOND SETTLEMENT
-            </span>
+          {/* Live Wallet & Balance Widget */}
+          <div className="flex items-center gap-3 bg-[#12151B] border border-[#242A34] px-3.5 py-1.5 rounded-xl relative">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#7A8290]">💰 Wallet:</span>
+              <span className="font-mono text-sm font-bold text-[#F5A623]">
+                ${balance.toFixed(2)} USDC
+              </span>
+            </div>
+
+            {/* Floating Live Deduction Animation */}
+            {deductionAnim && (
+              <span className={`absolute -bottom-5 right-2 text-xs font-bold animate-bounce ${deductionAnim.color}`}>
+                {deductionAnim.text}
+              </span>
+            )}
+
+            <button
+              onClick={handleTopUp}
+              className="bg-[#123526] hover:bg-[#1A4533] text-[#3ECF8E] border border-[#3ECF8E]/30 text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider transition active:scale-95"
+            >
+              + Top Up
+            </button>
+
             <WalletButton />
           </div>
         </div>
@@ -443,9 +554,9 @@ export default function AuctionsArenaPage() {
 
                   <button
                     onClick={handleDutchBuyNow}
-                    className="w-full py-4 bg-[#F5A623] hover:bg-[#D98E1A] active:scale-[0.98] text-[#141414] font-sans font-bold text-base rounded-xl transition shadow-lg"
+                    className="w-full py-4 bg-[#F5A623] hover:bg-[#D98E1A] active:scale-[0.98] text-[#141414] font-sans font-bold text-base rounded-xl transition shadow-lg flex items-center justify-center gap-2"
                   >
-                    ⚡ BUY NOW AT ${dutchPrice}
+                    <span>⚡ BUY NOW AT ${dutchPrice}</span>
                   </button>
 
                   <div className="grid grid-cols-3 gap-3 mt-4">
@@ -772,6 +883,98 @@ export default function AuctionsArenaPage() {
             )}
           </div>
         </div>
+
+        {/* Live Platform Audit Stream & Bet History Stream */}
+        <section className="p-4 md:p-8 border-t border-[#242A34] bg-[#12151B]">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <div className="text-[10px] text-[#3ECF8E] uppercase tracking-widest font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#3ECF8E] animate-ping" />
+                LIVE PLATFORM AUDIT STREAM & BET HISTORY
+              </div>
+              <h3 className="font-sans text-xl font-bold text-white mt-0.5">Real-Time x402 Game Logs</h3>
+            </div>
+            <span className="text-xs text-[#7A8290] border border-[#242A34] px-3 py-1 rounded-lg">
+              Append-Only Ledger
+            </span>
+          </div>
+
+          <div className="bg-[#0A0C10] border border-[#242A34] rounded-xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[#242A34] bg-[#181C24] text-[#7A8290] font-sans text-[10px] uppercase tracking-wider">
+                    <th className="p-3 pl-4">Event Type</th>
+                    <th className="p-3">Player Wallet</th>
+                    <th className="p-3">Details / Amount</th>
+                    <th className="p-3 text-right pr-4">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#242A34] font-mono">
+                  {auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-6 text-center text-[#454C58] text-xs">
+                        No live audit logs recorded yet. Place a bid to see real-time events!
+                      </td>
+                    </tr>
+                  ) : (
+                    auditLogs.map((log) => {
+                      let parsedPayload: any = {};
+                      try {
+                        parsedPayload = JSON.parse(log.payload);
+                      } catch (e) {}
+
+                      let badgeColor = 'bg-[#181C24] text-[#7A8290] border-[#242A34]';
+                      let icon = '📝';
+                      if (log.event_type.includes('LOCKED')) {
+                        badgeColor = 'bg-[#5C4517] text-[#F5A623] border-[#F5A623]/30';
+                        icon = '⚡';
+                      } else if (log.event_type.includes('PENNY')) {
+                        badgeColor = 'bg-[#3A1717] text-[#FF5C5C] border-[#FF5C5C]/30';
+                        icon = '💣';
+                      } else if (log.event_type.includes('COMMIT')) {
+                        badgeColor = 'bg-[#123526] text-[#3ECF8E] border-[#3ECF8E]/30';
+                        icon = '🙈';
+                      } else if (log.event_type.includes('REVEAL')) {
+                        badgeColor = 'bg-[#12151B] text-white border-[#242A34]';
+                        icon = '🔓';
+                      } else if (log.event_type.includes('SETTLED') || log.event_type.includes('RESOLVED')) {
+                        badgeColor = 'bg-[#3ECF8E] text-[#062017] border-[#3ECF8E]';
+                        icon = '🏆';
+                      }
+
+                      const walletStr = parsedPayload.wallet || parsedPayload.winner || '0x71C7...976F';
+
+                      return (
+                        <tr key={log.id} className="hover:bg-[#181C24]/50 transition">
+                          <td className="p-3 pl-4">
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] uppercase font-bold border ${badgeColor}`}>
+                              <span>{icon}</span>
+                              <span>{log.event_type}</span>
+                            </span>
+                          </td>
+                          <td className="p-3 text-white font-semibold">
+                            {walletStr.substring(0, 6)}...{walletStr.substring(walletStr.length - 4)}
+                          </td>
+                          <td className="p-3 text-[#7A8290]">
+                            {parsedPayload.serverPrice ? `Price Locked: $${parsedPayload.serverPrice}` : ''}
+                            {parsedPayload.newPot ? `Pot: $${parsedPayload.newPot.toFixed(2)} USDC` : ''}
+                            {parsedPayload.commitmentHash ? `Hash: ${parsedPayload.commitmentHash.substring(0, 10)}...` : ''}
+                            {parsedPayload.revealedBid ? `Bid: $${parsedPayload.revealedBid}` : ''}
+                            {parsedPayload.result?.winningBid ? `Winning Bid: $${parsedPayload.result.winningBid}` : ''}
+                          </td>
+                          <td className="p-3 text-right pr-4 text-[#454C58] text-[10px]">
+                            {new Date(log.timestamp).toLocaleTimeString()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
 
         {/* Game Rules & Protocol Mechanics Section */}
         <section className="p-4 md:p-8 border-t border-[#242A34] bg-[#12151B]/40">

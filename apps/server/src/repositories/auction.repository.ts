@@ -166,6 +166,11 @@ export class AuctionRepository {
     `);
     stmt.run(revealedBid, revealedSalt, nowMs, status, auctionId, wallet);
   }
+
+  public getRecentAuditLogs(limit: number = 30): any[] {
+    const stmt = db.prepare('SELECT * FROM auction_audit_logs ORDER BY timestamp DESC LIMIT ?');
+    return stmt.all(limit);
+  }
 }
 
 export const auctionRepository = new AuctionRepository();

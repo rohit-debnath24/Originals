@@ -10,13 +10,29 @@ const logger = createChildLogger('AuctionService');
 // In-memory mutex for Dutch Auction locks to prevent concurrency race conditions
 const activeAuctionLocks = new Set<string>();
 
+let wsGatewayInstance: any = null;
+
 export class AuctionService {
+  public static setWebSocketGateway(gateway: any) {
+    wsGatewayInstance = gateway;
+  }
+
+  public static broadcastUpdate(type: string, data: any) {
+    if (wsGatewayInstance) {
+      wsGatewayInstance.broadcast({ type, data, timestamp: Date.now() });
+    }
+  }
+
   /**
    * Initialize default seed auctions if none exist
    */
   public static initDefaultAuctions(): void {
     const active = auctionRepository.getActiveAuctions();
     const activeTypes = new Set(active.map(a => a.type));
+
+    if (active.length === 0) {
+      logger.info('Initializing x402 Auction Game instances...');
+    }
 
     // 1. Dutch Auction Royale
     if (!activeTypes.has('DUTCH')) {
@@ -127,6 +143,8 @@ export class AuctionService {
         serverTs: now,
       });
 
+      AuctionService.broadcastUpdate('AUCTION_LOCKED', { auctionId, wallet, serverPrice: validation.serverPrice });
+
       return {
         success: true,
         data: {
@@ -158,6 +176,8 @@ export class AuctionService {
     LedgerService.processDeposit(user.id, auction.pot_usdc, `dutch_win_${auctionId}`);
 
     auctionRepository.recordAuditLog(auctionId, 'SETTLED', { wallet, bidId, txHash });
+    AuctionService.broadcastUpdate('AUCTION_SETTLED', { auctionId, winner: wallet, prizeUsdc: auction.pot_usdc });
+
     return { success: true, winner: wallet, prizeUsdc: auction.pot_usdc };
   }
 
@@ -227,6 +247,13 @@ export class AuctionService {
       extendedBySoftClose,
     });
 
+    AuctionService.broadcastUpdate('PENNY_BID', {
+      auctionId,
+      potUsdc: newState.potUsdc,
+      currentLeaderWallet: wallet,
+      timerEndTs: newState.timerEndTs,
+    });
+
     return {
       success: true,
       data: {
@@ -257,6 +284,7 @@ export class AuctionService {
 
     auctionRepository.saveCommitment(auctionId, wallet, commitmentHash, entryFee);
     auctionRepository.recordAuditLog(auctionId, 'COMMITMENT_SUBMITTED', { wallet, commitmentHash, entryFee });
+    AuctionService.broadcastUpdate('COMMITMENT_SUBMITTED', { auctionId, wallet });
 
     return { success: true, message: 'Commitment hash accepted & entry fee paid.' };
   }
@@ -281,6 +309,7 @@ export class AuctionService {
 
     auctionRepository.updateRevealStatus(auctionId, wallet, revealedBid, revealedSalt, 'REVEALED');
     auctionRepository.recordAuditLog(auctionId, 'REVEAL_ACCEPTED', { wallet, revealedBid });
+    AuctionService.broadcastUpdate('REVEAL_ACCEPTED', { auctionId, wallet });
 
     return { success: true, message: 'Reveal verified and accepted.' };
   }
@@ -303,6 +332,7 @@ export class AuctionService {
     }
 
     auctionRepository.recordAuditLog(auctionId, 'SEALED_RESOLVED', { mode, result });
+    AuctionService.broadcastUpdate('SEALED_RESOLVED', { auctionId, mode, result });
 
     // Auto-create next active round for this game type
     AuctionService.initDefaultAuctions();
