@@ -3,3 +3,4 @@ export * from './game.types.js';
 export * from './provably-fair.types.js';
 export * from './ledger.types.js';
 export * from './api.types.js';
+export * from './algorand.types.js';

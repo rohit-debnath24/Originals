@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { WalletButton } from '@/components/features';
+import { WalletButton, AlgorandAtomicBadge } from '@/components/features';
 
 interface AuctionItem {
   id: string;
@@ -521,7 +521,9 @@ export default function AuctionsArenaPage() {
         )}
 
         {/* Main Content Arena */}
-        <div className="flex-1 p-4 md:p-8">
+        <div className="flex-1 p-4 md:p-8 space-y-6">
+          <AlgorandAtomicBadge walletAddress={DEMO_WALLET} />
+
           <div className={`grid gap-6 lg:gap-8 ${activeTab === 'all' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
             
             {/* GAME 1: DUTCH AUCTION */}

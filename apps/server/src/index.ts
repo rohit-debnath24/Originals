@@ -5,7 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { logger } from './utils/logger.js';
 import { errorHandler, requestLogger } from './middleware/index.js';
-import { authRoutes, userRoutes, gameRoutes, auctionRoutes } from './routes/index.js';
+import { authRoutes, userRoutes, gameRoutes, auctionRoutes, algorandRoutes } from './routes/index.js';
 import { AuctionService } from './services/auction.service.js';
 import { initializeDatabase } from './db/index.js';
 import { WebSocketGateway } from './gateway/ws.gateway.js';
@@ -63,6 +63,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/auction', auctionRoutes);
+app.use('/api/algorand', algorandRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

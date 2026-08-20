@@ -5,3 +5,4 @@ export { CrashGame } from './CrashGame';
 export { MinesGame } from './MinesGame';
 export { PlinkoGame } from './PlinkoGame';
 export { CreateWalletModal } from './CreateWalletModal';
+export { AlgorandAtomicBadge } from './AlgorandAtomicBadge';
