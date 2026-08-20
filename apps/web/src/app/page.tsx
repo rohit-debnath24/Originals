@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { DiceGame, WalletButton } from '@/components/features';
+import { PlinkoGame, MinesGame, WalletButton } from '@/components/features';
 
 export default function HomePage() {
   const [tickerTicks, setTickerTicks] = useState<any[]>([]);
+  const [featuredGame, setFeaturedGame] = useState<'plinko' | 'mines'>('plinko');
 
   useEffect(() => {
     const games = ['DICE', 'PLINKO', 'CRASH', 'MINES'];
@@ -69,7 +70,7 @@ export default function HomePage() {
             </p>
             <div className="flex gap-4 flex-wrap">
               <Link href="/auctions" className="bg-[#E8A93B] hover:bg-[#B8842A] text-[#0F1B16] px-6 py-3.5 rounded-[10px] font-bold text-sm transition">
-                🔥 Play x402 Bidding Games →
+                🔥 Play x402 Multiplayer Bidding Games →
               </Link>
               <a href="#games" className="border border-[rgba(241,237,225,0.22)] hover:border-[#F1EDE1] px-6 py-3.5 rounded-[10px] font-medium text-sm text-[#F1EDE1] transition">
                 Play Originals
@@ -144,8 +145,38 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Interactive Dice Game Play Area */}
-          <DiceGame />
+          {/* Interactive Game Stage (Plinko & Mines) */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between border-b border-[rgba(241,237,225,0.12)] pb-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setFeaturedGame('plinko')}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition ${
+                    featuredGame === 'plinko'
+                      ? 'bg-[#E8A93B] text-[#0F1B16] shadow-lg'
+                      : 'bg-[#152620] text-[#93A499] hover:text-[#F1EDE1] border border-[rgba(241,237,225,0.12)]'
+                  }`}
+                >
+                  <span>📍</span> Plinko Game
+                </button>
+                <button
+                  onClick={() => setFeaturedGame('mines')}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition ${
+                    featuredGame === 'mines'
+                      ? 'bg-[#E8A93B] text-[#0F1B16] shadow-lg'
+                      : 'bg-[#152620] text-[#93A499] hover:text-[#F1EDE1] border border-[rgba(241,237,225,0.12)]'
+                  }`}
+                >
+                  <span>💣</span> Mines Game
+                </button>
+              </div>
+              <span className="font-mono-code text-xs text-[#93A499] hidden sm:inline-block">
+                Select game to play live on home page
+              </span>
+            </div>
+
+            {featuredGame === 'plinko' ? <PlinkoGame /> : <MinesGame />}
+          </div>
 
           {/* Other Originals Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
