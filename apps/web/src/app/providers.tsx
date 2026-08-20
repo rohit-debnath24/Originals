@@ -1,7 +1,7 @@
 'use client';
 
 import { Web3Provider, AuthProvider } from '@/components/providers';
-import { PinSetupModal } from '@/components/features';
+import { PinSetupModal, CreateWalletModal } from '@/components/features';
 import { useAuth } from '@/components/providers';
 
 function AuthWrapper({ children }: { children: React.ReactNode }) {
@@ -10,6 +10,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
+      <CreateWalletModal />
       <PinSetupModal isOpen={needsPinSetup} />
     </>
   );

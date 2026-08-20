@@ -88,8 +88,9 @@ export default function AuctionsArenaPage() {
         body: JSON.stringify({ wallet: DEMO_WALLET }),
       });
       const data = await res.json();
-      if (data.success) {
-        setBalance(data.data.balance_usdc);
+      if (data.success && data.data) {
+        const newBal = data.data.balance_usdc ?? data.data.balanceUSDC ?? 100.0;
+        setBalance(newBal);
         triggerDeductionAnimation('+100.00 USDC', 'text-[#3ECF8E]');
         setActionMsg('🎉 Claimed +100 USDC testnet balance!');
       }

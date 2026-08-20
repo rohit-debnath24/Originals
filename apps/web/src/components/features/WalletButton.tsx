@@ -1,78 +1,36 @@
 'use client';
 
 import { useAccount, useConnect, useDisconnect } from 'wagmi';
-import { Button } from '@/components/ui';
 import { useAuth } from '@/components/providers';
-import { useState, useEffect } from 'react';
 
 export function WalletButton() {
-  const { isAuthenticated, isLoading: authLoading, signIn, signOut } = useAuth();
+  const { user, isAuthenticated, walletAddress, signOut, createInstantWallet } = useAuth();
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const [signingIn, setSigningIn] = useState(false);
 
-  // Auto sign-in when connected but not authenticated
-  useEffect(() => {
-    if (isConnected && !isAuthenticated && !authLoading && !signingIn) {
-      setSigningIn(true);
-      signIn()
-        .catch((error) => {
-          console.error('Auto sign-in failed:', error);
-        })
-        .finally(() => {
-          setSigningIn(false);
-        });
-    }
-  }, [isConnected, isAuthenticated, authLoading, signingIn, signIn]);
+  const currentAddress = user?.walletAddress || walletAddress || address;
 
-  // Not connected - show connect button
-  if (!isConnected) {
+  if (isAuthenticated && currentAddress) {
     return (
-      <div className="flex flex-col gap-2">
-        {connectors.map((connector) => (
-          <Button
-            key={connector.id}
-            onClick={() => connect({ connector })}
-            disabled={isPending}
-            className="w-full"
-          >
-            {isPending ? 'Connecting...' : `Connect ${connector.name}`}
-          </Button>
-        ))}
-      </div>
-    );
-  }
-
-  // Connected but not authenticated - show sign in button
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col gap-3">
-        <div className="px-4 py-2 bg-gray-800 rounded-lg text-center">
-          <p className="text-xs text-gray-400">Connected</p>
-          <p className="font-mono text-sm">
-            {address?.slice(0, 6)}...{address?.slice(-4)}
-          </p>
+      <div className="flex items-center gap-3">
+        <div className="px-3.5 py-1.5 bg-[#152620] border border-[rgba(241,237,225,0.18)] rounded-xl flex items-center gap-2.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#3ECF8E] animate-pulse" />
+          <div className="flex flex-col text-left">
+            <span className="text-xs font-bold text-[#F1EDE1] leading-none">
+              {user?.name || 'Player'}
+            </span>
+            <span className="font-mono-code text-[11px] text-[#E8A93B]">
+              {currentAddress.slice(0, 6)}...{currentAddress.slice(-4)}
+            </span>
+          </div>
         </div>
-        <Button
-          onClick={async () => {
-            setSigningIn(true);
-            try {
-              await signIn();
-            } catch (error) {
-              console.error('Sign in failed:', error);
-            } finally {
-              setSigningIn(false);
-            }
-          }}
-          disabled={authLoading || signingIn}
-          className="w-full"
-        >
-          {signingIn ? 'Signing in...' : 'Sign In with Wallet'}
-        </Button>
         <button
-          onClick={() => disconnect()}
-          className="text-sm text-gray-400 hover:text-white"
+          onClick={() => {
+            signOut();
+            disconnect();
+          }}
+          className="px-3 py-1.5 border border-[rgba(241,237,225,0.12)] hover:border-[#FF5C5C]/50 text-xs font-medium text-[#93A499] hover:text-[#FF5C5C] rounded-xl transition"
         >
           Disconnect
         </button>
@@ -80,25 +38,31 @@ export function WalletButton() {
     );
   }
 
-  // Connected and authenticated - show account menu
   return (
-    <div className="flex flex-col gap-3">
-      <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-center">
-        <p className="text-xs text-emerald-400">Authenticated</p>
-        <p className="font-mono text-sm">
-          {address?.slice(0, 6)}...{address?.slice(-4)}
-        </p>
-      </div>
-      <Button
-        onClick={async () => {
-          await signOut();
-          disconnect();
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => {
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('x402_wallet_modal_dismissed');
+            window.dispatchEvent(new Event('storage'));
+          }
+          createInstantWallet();
         }}
-        variant="outline"
-        className="w-full"
+        className="bg-gradient-to-r from-[#E8A93B] to-[#D4952A] hover:from-[#F0B44D] hover:to-[#E8A93B] text-[#0F1B16] font-bold text-xs px-4 py-2 rounded-xl transition shadow"
       >
-        Sign Out & Disconnect
-      </Button>
+        ✨ Create Wallet
+      </button>
+
+      {connectors.slice(0, 1).map((connector) => (
+        <button
+          key={connector.id}
+          onClick={() => connect({ connector })}
+          disabled={isPending}
+          className="border border-[rgba(241,237,225,0.22)] hover:border-[#F1EDE1] text-xs font-medium text-[#F1EDE1] px-3 py-2 rounded-xl transition"
+        >
+          {isPending ? 'Connecting...' : 'Connect Web3'}
+        </button>
+      ))}
     </div>
   );
 }

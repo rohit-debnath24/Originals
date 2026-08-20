@@ -15,6 +15,7 @@ interface AuthContextType {
   signOut: () => void;
   setupPin: (pin: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  createInstantWallet: (nickname?: string, customAddress?: string) => Promise<{ address: string; name: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,8 +39,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(activeUser);
       setIsAuthenticated(true);
     } else {
-      setUser(null);
-      setIsAuthenticated(false);
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('x402_saved_wallet') : null;
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setUser({
+            id: parsed.address.toLowerCase(),
+            name: parsed.name || `Player_${parsed.address.slice(0, 6)}`,
+            walletAddress: parsed.address,
+            hasPin: true,
+          });
+          setIsAuthenticated(true);
+        } catch {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
     }
   }, [isConnected, address]);
 
@@ -57,7 +75,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(true);
   }, [address]);
 
+  const createInstantWallet = useCallback(async (nickname?: string, customAddress?: string) => {
+    const chars = '0123456789abcdef';
+    let newAddress = customAddress;
+    if (!newAddress) {
+      newAddress = '0x';
+      for (let i = 0; i < 40; i++) {
+        newAddress += chars[Math.floor(Math.random() * chars.length)];
+      }
+    }
+
+    const walletName = nickname || `Player_${newAddress.slice(2, 8)}`;
+
+    try {
+      await fetch('http://localhost:3001/api/users/faucet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: newAddress }),
+      });
+    } catch (e) {
+      console.error('Auto faucet failed during instant wallet creation', e);
+    }
+
+    const activeUser: AuthUser = {
+      id: newAddress.toLowerCase(),
+      name: walletName,
+      walletAddress: newAddress,
+      hasPin: true,
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('x402_saved_wallet', JSON.stringify({ address: newAddress, name: walletName }));
+    }
+
+    setUser(activeUser);
+    setIsAuthenticated(true);
+    return { address: newAddress, name: walletName };
+  }, []);
+
   const signOut = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('x402_saved_wallet');
+    }
     setUser(null);
     setIsAuthenticated(false);
     disconnect();
@@ -68,7 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    if (address) {
+    if (user?.walletAddress) {
+      setUser({
+        id: user.walletAddress.toLowerCase(),
+        name: user.name,
+        walletAddress: user.walletAddress,
+        hasPin: true,
+      });
+    } else if (address) {
       setUser({
         id: address.toLowerCase(),
         name: `Player_${address.slice(0, 6)}`,
@@ -76,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         hasPin: true,
       });
     }
-  }, [address]);
+  }, [address, user]);
 
   return (
     <AuthContext.Provider
@@ -85,12 +151,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isConnected,
         isAuthenticated,
-        walletAddress: address,
+        walletAddress: user?.walletAddress || address,
         needsPinSetup: false,
         signIn,
         signOut,
         setupPin,
         refreshUser,
+        createInstantWallet,
       }}
     >
       {children}
