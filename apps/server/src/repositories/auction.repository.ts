@@ -168,7 +168,7 @@ export class AuctionRepository {
   }
 
   public getRecentAuditLogs(limit: number = 30): any[] {
-    const stmt = db.prepare('SELECT * FROM auction_audit_logs ORDER BY timestamp DESC LIMIT ?');
+    const stmt = db.prepare('SELECT *, created_at as timestamp FROM auction_audit_logs ORDER BY created_at DESC LIMIT ?');
     return stmt.all(limit);
   }
 }
