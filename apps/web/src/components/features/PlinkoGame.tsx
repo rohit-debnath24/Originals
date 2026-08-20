@@ -62,8 +62,8 @@ export function PlinkoGame() {
     try {
       const res = await fetch(`http://localhost:3001/api/users/${currentUserId}/faucet`, { method: 'POST' });
       const data = await res.json();
-      if (data.success) {
-        setBalance(data.data.balanceUSDC);
+      if (data.success && data.data) {
+        setBalance(data.data.balance_usdc ?? data.data.balanceUSDC ?? 100.0);
       }
     } catch (e) {
       console.error('Faucet failed', e);

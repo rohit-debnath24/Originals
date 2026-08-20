@@ -65,3 +65,13 @@ gameRoutes.get('/recent-bets', (_req, res) => {
   const bets = betRepository.getRecentBets(20);
   res.json({ success: true, data: bets });
 });
+
+gameRoutes.get('/stats', (_req, res) => {
+  const stats = betRepository.getStats();
+  res.json({ success: true, data: stats });
+});
+
+gameRoutes.get('/ticker', (_req, res) => {
+  const ticker = betRepository.getTickerData();
+  res.json({ success: true, data: ticker });
+});

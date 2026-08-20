@@ -8,27 +8,40 @@ export default function HomePage() {
   const [tickerTicks, setTickerTicks] = useState<any[]>([]);
   const [featuredGame, setFeaturedGame] = useState<'plinko' | 'mines'>('plinko');
 
-  useEffect(() => {
-    const games = ['DICE', 'PLINKO', 'CRASH', 'MINES'];
-    const generateTicks = () => {
-      const list = [];
-      for (let i = 0; i < 16; i++) {
-        const g = games[Math.floor(Math.random() * games.length)];
-        const result =
-          g === 'DICE'
-            ? `roll ${(Math.random() * 99.9).toFixed(1)}`
-            : g === 'CRASH'
-            ? `${(1 + Math.random() * 4).toFixed(2)}x`
-            : g === 'MINES'
-            ? `${Math.floor(Math.random() * 12) + 3} tiles`
-            : `${(2 + Math.random() * 10).toFixed(1)}x bucket`;
+  const [platformStats, setPlatformStats] = useState<{
+    totalWagered: number;
+    totalRounds: number;
+    medianPayoutTime: string;
+    settlementRail: string;
+  }>({
+    totalWagered: 482110,
+    totalRounds: 228904,
+    medianPayoutTime: '1.8s',
+    settlementRail: 'USDC / Base',
+  });
 
-        const randomHash = Math.random().toString(16).substring(2, 10);
-        list.push({ game: g, result, hash: `${randomHash}…${randomHash.substring(0, 4)}` });
+  useEffect(() => {
+    const fetchStatsAndTicker = async () => {
+      try {
+        const statsRes = await fetch('http://localhost:3001/api/game/stats');
+        const statsData = await statsRes.json();
+        if (statsData.success && statsData.data) {
+          setPlatformStats(statsData.data);
+        }
+
+        const tickerRes = await fetch('http://localhost:3001/api/game/ticker');
+        const tickerData = await tickerRes.json();
+        if (tickerData.success && tickerData.data && Array.isArray(tickerData.data)) {
+          setTickerTicks(tickerData.data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch platform stats', e);
       }
-      return list;
     };
-    setTickerTicks(generateTicks());
+
+    fetchStatsAndTicker();
+    const interval = setInterval(fetchStatsAndTicker, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -82,19 +95,19 @@ export default function HomePage() {
           <div className="flex flex-col border-t lg:border-t-0 lg:border-l border-[rgba(241,237,225,0.12)] pt-6 lg:pt-0 lg:pl-8 space-y-4">
             <div className="flex justify-between items-center py-3 border-b border-[rgba(241,237,225,0.12)]">
               <span className="text-xs text-[#5E6E64]">Wagered, 24h</span>
-              <span className="font-mono-code text-xl text-[#F1EDE1]">$482,110</span>
+              <span className="font-mono-code text-xl text-[#F1EDE1]">${platformStats.totalWagered.toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center py-3 border-b border-[rgba(241,237,225,0.12)]">
               <span className="text-xs text-[#5E6E64]">Rounds settled</span>
-              <span className="font-mono-code text-xl text-[#E8A93B]">228,904</span>
+              <span className="font-mono-code text-xl text-[#E8A93B]">{platformStats.totalRounds.toLocaleString()}</span>
             </div>
             <div className="flex justify-between items-center py-3 border-b border-[rgba(241,237,225,0.12)]">
               <span className="text-xs text-[#5E6E64]">Median payout time</span>
-              <span className="font-mono-code text-xl text-[#F1EDE1]">1.8s</span>
+              <span className="font-mono-code text-xl text-[#F1EDE1]">{platformStats.medianPayoutTime}</span>
             </div>
             <div className="flex justify-between items-center py-3 border-b border-[rgba(241,237,225,0.12)]">
               <span className="text-xs text-[#5E6E64]">Settlement rail</span>
-              <span className="font-mono-code text-xl text-[#F1EDE1]">USDC / Base</span>
+              <span className="font-mono-code text-xl text-[#F1EDE1]">{platformStats.settlementRail}</span>
             </div>
           </div>
         </div>

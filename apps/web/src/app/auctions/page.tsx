@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { WalletButton, AlgorandAtomicBadge } from '@/components/features';
+import { useAuth } from '@/components/providers';
 
 interface AuctionItem {
   id: string;
@@ -28,13 +29,14 @@ interface AuditLog {
 }
 
 export default function AuctionsArenaPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 's1' | 's2' | 's3' | 's4'>('all');
   const [auctions, setAuctions] = useState<AuctionItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
-  // User Wallet & Balance State
-  const DEMO_WALLET = '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
+  // User Wallet & Balance State dynamically derived from auth provider
+  const DEMO_WALLET = user?.walletAddress || user?.id || '0x71C7656EC7ab88b098defB751B7401B5f6d8976F';
   const [balance, setBalance] = useState<number>(100.0);
   const [deductionAnim, setDeductionAnim] = useState<{ text: string; color: string } | null>(null);
 
@@ -43,6 +45,14 @@ export default function AuctionsArenaPage() {
   const [dutchElapsed, setDutchElapsed] = useState(0);
   const [dutchTicks, setDutchTicks] = useState(0);
   const [dutchFlashing, setDutchFlashing] = useState(false);
+  const [dutchWinner, setDutchWinner] = useState<{
+    winnerWallet: string;
+    buyPrice: number;
+    prizePool: number;
+    netProfit: number;
+    cooldownSeconds: number;
+  } | null>(null);
+  const [lastDutchWinner, setLastDutchWinner] = useState<{ wallet: string; price: number; profit: number } | null>(null);
 
   // Game 2: Penny Bomb State
   const [pennyTimeLeft, setPennyTimeLeft] = useState(12.4);
@@ -134,6 +144,20 @@ export default function AuctionsArenaPage() {
       const logData = await logRes.json();
       if (logData.success && logData.data) {
         setAuditLogs(logData.data);
+        const dutchLog = logData.data.find((l: AuditLog) => l.event_type === 'SETTLED');
+        if (dutchLog && dutchLog.payload) {
+          try {
+            const parsed = JSON.parse(dutchLog.payload);
+            if (parsed.wallet) {
+              const p = parsed.serverPrice || 45.0;
+              setLastDutchWinner((prev) => prev || {
+                wallet: parsed.wallet,
+                price: p,
+                profit: Math.max(0, 100.0 - p),
+              });
+            }
+          } catch (e) {}
+        }
       }
     } catch (err) {
       console.error('Auction polling failed', err);
@@ -150,10 +174,27 @@ export default function AuctionsArenaPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Dutch winner cooldown timer
+  useEffect(() => {
+    if (!dutchWinner) return;
+
+    if (dutchWinner.cooldownSeconds <= 0) {
+      setDutchWinner(null);
+      fetchAuctionsAndLogs();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setDutchWinner((prev) => (prev ? { ...prev, cooldownSeconds: prev.cooldownSeconds - 1 } : null));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [dutchWinner]);
+
   // Dutch local timer tick animation
   useEffect(() => {
     const dutchItem = auctions.find((a) => a.type === 'DUTCH');
-    if (!dutchItem) return;
+    if (!dutchItem || dutchWinner) return;
 
     const tickInterval = setInterval(() => {
       const elapsed = Date.now() - dutchItem.start_time;
@@ -169,7 +210,7 @@ export default function AuctionsArenaPage() {
     }, 500);
 
     return () => clearInterval(tickInterval);
-  }, [auctions]);
+  }, [auctions, dutchWinner]);
 
   // Penny Bomb real-time countdown timer derived from server end timestamp
   useEffect(() => {
@@ -192,7 +233,7 @@ export default function AuctionsArenaPage() {
   // --- Handlers ---
   const handleDutchBuyNow = async () => {
     const dutchItem = auctions.find((a) => a.type === 'DUTCH');
-    if (!dutchItem) return;
+    if (!dutchItem || dutchWinner) return;
 
     try {
       setActionMsg('⚡ Submitting x402 Buy Intent lock...');
@@ -211,11 +252,15 @@ export default function AuctionsArenaPage() {
 
       const result = await res.json();
       if (result.success) {
-        setActionMsg(`✅ LOCKED AT $${result.data.settlementPriceUsdc}! Settling x402 payment...`);
+        const buyPrice = result.data.settlementPriceUsdc;
+        const prizePool = dutchItem.pot_usdc || 100.0;
+        const netProfit = Math.max(0, prizePool - buyPrice);
+
+        setActionMsg(`🏆 DUTCH ROYALE WON! Bought at $${buyPrice.toFixed(2)} for $${prizePool} pool (+$${netProfit.toFixed(2)} profit)!`);
         
         // Immediate balance deduction animation
-        setBalance((prev) => Math.max(0, prev - result.data.settlementPriceUsdc));
-        triggerDeductionAnimation(`-${result.data.settlementPriceUsdc.toFixed(2)} USDC`, 'text-[#FF5C5C]');
+        setBalance((prev) => Math.max(0, prev - buyPrice));
+        triggerDeductionAnimation(`-${buyPrice.toFixed(2)} USDC`, 'text-[#FF5C5C]');
 
         await fetch(`${API_URL}/auction/dutch/settle`, {
           method: 'POST',
@@ -228,9 +273,23 @@ export default function AuctionsArenaPage() {
           }),
         });
 
-        // Trigger win payout animation
-        triggerDeductionAnimation(`+$${dutchItem.pot_usdc || 100} WIN!`, 'text-[#3ECF8E]');
-        fetchAuctionsAndLogs();
+        // Trigger win payout animation & winner celebration screen
+        triggerDeductionAnimation(`+$${prizePool} WIN!`, 'text-[#3ECF8E]');
+        
+        setDutchWinner({
+          winnerWallet: DEMO_WALLET,
+          buyPrice,
+          prizePool,
+          netProfit,
+          cooldownSeconds: 5,
+        });
+
+        setLastDutchWinner({
+          wallet: DEMO_WALLET,
+          price: buyPrice,
+          profit: netProfit,
+        });
+
         fetchUserBalance();
       } else {
         setActionMsg(`❌ ${result.error}`);
@@ -540,33 +599,77 @@ export default function AuctionsArenaPage() {
                     </span>
                   </div>
 
-                  <div className="bg-[#0A0C10] p-6 rounded-xl border border-[#242A34] text-center my-4">
-                    <div className="text-[10px] text-[#454C58] tracking-widest uppercase mb-1">Current Price</div>
-                    <div className={`font-sans text-5xl lg:text-6xl font-bold tracking-tight transition-colors duration-150 ${dutchFlashing ? 'text-[#FF5C5C]' : 'text-white'}`}>
-                      ${dutchPrice}
-                    </div>
-                    <div className="text-xs text-[#7A8290] mt-2">Prize value: $100 USDC · buy low for max profit</div>
+                  {dutchWinner ? (
+                    <div className="bg-[#3ECF8E]/10 border-2 border-[#3ECF8E] rounded-2xl p-6 text-center my-4 animate-bounce-short shadow-[0_0_30px_rgba(62,207,142,0.2)]">
+                      <div className="text-4xl mb-1">🏆</div>
+                      <h4 className="font-archivo text-xl font-black text-[#3ECF8E] tracking-tight uppercase">
+                        DUTCH ROYALE WINNER!
+                      </h4>
+                      <p className="text-sm font-bold text-white mt-1">
+                        {dutchWinner.winnerWallet === DEMO_WALLET
+                          ? '🎉 YOU WON THIS ROUND!'
+                          : `Winner: ${dutchWinner.winnerWallet.slice(0, 6)}...${dutchWinner.winnerWallet.slice(-4)}`}
+                      </p>
 
-                    {/* Meter */}
-                    <div className="h-2 bg-[#181C24] rounded-full overflow-hidden my-4">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#F5A623] to-[#FF5C5C] transition-all duration-300"
-                        style={{ width: `${Math.max(2, (dutchPrice / 150) * 100)}%` }}
-                      />
-                    </div>
+                      <div className="grid grid-cols-3 gap-2 my-4 bg-[#0A0C10] p-3 rounded-xl border border-[#3ECF8E]/30 font-mono text-xs">
+                        <div>
+                          <div className="text-[#93A499] text-[10px]">Buy Price</div>
+                          <div className="text-[#FF5C5C] font-bold text-sm">${dutchWinner.buyPrice.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[#93A499] text-[10px]">Prize Pool</div>
+                          <div className="text-[#F1EDE1] font-bold text-sm">${dutchWinner.prizePool.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-[#93A499] text-[10px]">Net Profit</div>
+                          <div className="text-[#3ECF8E] font-bold text-sm">+${dutchWinner.netProfit.toFixed(2)}</div>
+                        </div>
+                      </div>
 
-                    <div className="flex justify-between text-xs text-[#454C58] font-mono">
-                      <span>$150 start</span>
-                      <span>$10 floor</span>
+                      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#E8A93B]/10 border border-[#E8A93B]/30 rounded-full text-xs font-mono text-[#E8A93B]">
+                        <span>⏳ Next Round Starting in {dutchWinner.cooldownSeconds}s...</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="bg-[#0A0C10] p-6 rounded-xl border border-[#242A34] text-center my-4">
+                        <div className="text-[10px] text-[#454C58] tracking-widest uppercase mb-1">Current Price</div>
+                        <div className={`font-sans text-5xl lg:text-6xl font-bold tracking-tight transition-colors duration-150 ${dutchFlashing ? 'text-[#FF5C5C]' : 'text-white'}`}>
+                          ${dutchPrice}
+                        </div>
+                        <div className="text-xs text-[#7A8290] mt-2">Prize value: $100 USDC · buy low for max profit</div>
 
-                  <button
-                    onClick={handleDutchBuyNow}
-                    className="w-full py-4 bg-[#F5A623] hover:bg-[#D98E1A] active:scale-[0.98] text-[#141414] font-sans font-bold text-base rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-                  >
-                    <span>⚡ BUY NOW AT ${dutchPrice}</span>
-                  </button>
+                        {/* Meter */}
+                        <div className="h-2 bg-[#181C24] rounded-full overflow-hidden my-4">
+                          <div
+                            className="h-full bg-gradient-to-r from-[#F5A623] to-[#FF5C5C] transition-all duration-300"
+                            style={{ width: `${Math.max(2, (dutchPrice / 150) * 100)}%` }}
+                          />
+                        </div>
+
+                        <div className="flex justify-between text-xs text-[#454C58] font-mono">
+                          <span>$150 start</span>
+                          <span>$10 floor</span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleDutchBuyNow}
+                        className="w-full py-4 bg-[#F5A623] hover:bg-[#D98E1A] active:scale-[0.98] text-[#141414] font-sans font-bold text-base rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+                      >
+                        <span>⚡ BUY NOW AT ${dutchPrice}</span>
+                      </button>
+                    </>
+                  )}
+
+                  {lastDutchWinner && (
+                    <div className="mt-3 p-2.5 bg-[#0A0C10] border border-[rgba(241,237,225,0.12)] rounded-xl flex items-center justify-between text-xs font-mono">
+                      <span className="text-[#93A499]">🏆 Last Winner:</span>
+                      <span className="text-[#E8A93B]">
+                        {lastDutchWinner.wallet.slice(0, 6)}...{lastDutchWinner.wallet.slice(-4)} bought @ ${lastDutchWinner.price.toFixed(2)} (<strong className="text-[#3ECF8E]">+{lastDutchWinner.profit > 0 ? lastDutchWinner.profit.toFixed(2) : '0.00'} profit</strong>)
+                      </span>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3 mt-4">
                     <div className="bg-[#181C24] border border-[#242A34] rounded-lg p-2.5 text-center">
